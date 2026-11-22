@@ -9,7 +9,9 @@ if(ENABLE_GLES2)
 endif()
 
 # Platform-specific configuration
-if(WIN32)
+if(EMSCRIPTEN)
+	add_definitions(-DENABLE_GL3)
+elseif(WIN32)
 	add_definitions(-DUNICODE)
 	add_definitions(-D_UNICODE)
 else()
@@ -118,9 +120,15 @@ if(ENABLE_GL1)
 		Renderers/ImGuiRendererSDLGL1.cpp
 	)
 endif()
-if(ENABLE_GL3)
+if(ENABLE_GL3 OR EMSCRIPTEN)
 	LIST(APPEND SOURCES
 		Renderers/ImGuiRendererSDLGL3.cpp
+	)
+endif()
+
+if(EMSCRIPTEN)
+	LIST(APPEND SOURCES
+		../web/web.cpp
 	)
 endif()
 
@@ -221,6 +229,11 @@ if(GIO_FOUND)
 	)
 endif()
 
+
+if(EMSCRIPTEN)
+	include(${PROJECT_SOURCE_DIR}/src/web/target.cmake) # SDL2 is an Emscripten port
+	return()
+endif()
 
 if(MINGW)
 target_link_libraries(${PROJECT_NAME_LOWER}

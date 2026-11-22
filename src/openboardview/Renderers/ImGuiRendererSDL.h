@@ -4,11 +4,7 @@
 #include <string>
 
 // SDL, glad
-#ifdef ENABLE_GLES2
-#include <glad/gles2.h>
-#else
-#include <glad/gl.h>
-#endif
+#include "GL.h"
 #include <SDL.h>
 
 #include <imgui.h>

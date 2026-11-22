@@ -3,11 +3,7 @@
 #include <sstream>
 #include <vector>
 
-#ifdef ENABLE_GLES2
-#include <glad/gles2.h>
-#else
-#include <glad/gl.h>
-#endif
+#include "GL.h"
 
 #define STB_IMAGE_IMPLEMENTATION
 #include <stb_image.h>
@@ -51,7 +47,7 @@ bool ImGuiRendererSDL::init() {
 
 	// Setup window
 	uint32_t window_flags = SDL_WINDOW_OPENGL | SDL_WINDOW_RESIZABLE;
-#if defined(_WIN32) || defined(__APPLE__)
+#if defined(_WIN32) || defined(__APPLE__) || defined(__EMSCRIPTEN__)
 	window_flags |= SDL_WINDOW_ALLOW_HIGHDPI;
 #endif
 	window = SDL_CreateWindow("", SDL_WINDOWPOS_UNDEFINED, SDL_WINDOWPOS_UNDEFINED, 0, 0, window_flags);
@@ -71,7 +67,9 @@ bool ImGuiRendererSDL::init() {
 		return false;
 	}
 
-#ifdef ENABLE_GLES2
+#if defined(__EMSCRIPTEN__)
+	this->version = GLAD_MAKE_VERSION(3, 0); // Context creation fails if WebGL 2 is unavailable
+#elif defined(ENABLE_GLES2)
 	this->version = gladLoadGLES2(reinterpret_cast<GLADloadfunc>(SDL_GL_GetProcAddress));
 #else
 	this->version = gladLoadGL(reinterpret_cast<GLADloadfunc>(SDL_GL_GetProcAddress));
@@ -99,9 +97,11 @@ bool ImGuiRendererSDL::init() {
 	ss << "\n-------------------------------------------------------------\n";
 	SDL_LogInfo(SDL_LOG_CATEGORY_RENDER, "%s", ss.str().c_str());
 
+#ifndef __EMSCRIPTEN__ // Always synchronized by requestAnimationFrame
 	// Use Vsync
 	if (SDL_GL_SetSwapInterval(1) < 0)
 		SDL_LogWarn(SDL_LOG_CATEGORY_RENDER, "%s: Unable to enable VSync: %s\n", this->name().c_str(), SDL_GetError());
+#endif
 
 	// check if we got the correct OpenGL context version
 	if (!this->checkGLVersion(this->version)) {

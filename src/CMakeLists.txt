@@ -1,3 +1,10 @@
+## WebAssembly ##
+if(EMSCRIPTEN)
+	include(web/dependencies.cmake)
+	add_subdirectory(openboardview)
+	return()
+endif()
+
 ## COMMON ##
 option(ENABLE_GL1 "Build OpenGL 1 renderer." ON)
 option(ENABLE_GL3 "Build OpenGL 3 renderer." ON)

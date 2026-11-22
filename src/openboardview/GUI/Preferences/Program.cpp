@@ -37,6 +37,7 @@ void Program::render() {
 
 		int t;
 
+#ifndef __EMSCRIPTEN__ // The browser window decides
 		t = config.windowX;
 		RightAlignedText("Window width", DPI(250));
 		ImGui::SameLine();
@@ -50,6 +51,7 @@ void Program::render() {
 		if (ImGui::InputInt("##windowY", &t)) {
 			if (t > 320) config.windowY = t;
 		}
+#endif
 
 		std::vector<char> newFont(config.fontName.c_str(), config.fontName.c_str() + config.fontName.size() + 1); // Copy string data + '\0' char
 		if (newFont.size() < 256)                                          // reserve space for new font name

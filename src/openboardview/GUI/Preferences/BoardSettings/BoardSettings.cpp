@@ -20,8 +20,10 @@ void BoardSettings::render() {
 	if (shown) {
 		ImGui::Begin("Board Settings", &shown, ImGuiWindowFlags_AlwaysAutoResize);
 
+#ifndef __EMSCRIPTEN__ // No PDF software to talk to from a browser
 		ImGui::Separator();
 		pdfFilePreferences.render(true);
+#endif
 
 		ImGui::Separator();
 		backgroundImagePreferences.render(true);

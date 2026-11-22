@@ -49,6 +49,10 @@
 #define stricmp strcasecmp
 #endif
 
+#ifdef __EMSCRIPTEN__
+#include "web.h"
+#endif
+
 BoardView::~BoardView() {
 	if (m_validBoard) {
 		m_board->Nets().clear();
@@ -939,7 +943,11 @@ void BoardView::Update() {
 			{
 				int i;
 				for (i = 0; i < fhistory.count; i++) {
+#ifdef __EMSCRIPTEN__ // Parent directory is a hash
+					std::string history_item(fhistory.Trim_filename(fhistory.history[i], 1));
+#else
 					std::string history_item(fhistory.Trim_filename(fhistory.history[i], 2));
+#endif
 					history_item += "##History" + std::to_string(i);
 					if (ImGui::MenuItem(history_item.c_str())) {
 						open_file       = true;
@@ -960,11 +968,13 @@ void BoardView::Update() {
 			keyboardPreferences.menuItem();
 			boardSettings.menuItem();
 
+#ifndef __EMSCRIPTEN__
 			ImGui::Separator();
 
 			if (ImGui::MenuItem("Quit", keybindings.getKeyNames("Quit").c_str())) {
 				m_wantsQuit = true;
 			}
+#endif
 			ImGui::EndMenu();
 		}
 		if (ImGui::BeginMenu("View")) {
@@ -1189,7 +1199,11 @@ void BoardView::Update() {
 			filepath        = filesystem::u8path(preset_filename);
 			preset_filename = NULL;
 		} else {
+#ifdef __EMSCRIPTEN__
+			web::pickBoard();
+#else
 			filepath = show_file_picker(true);
+#endif
 
 			ImGuiIO &io           = ImGui::GetIO();
 			io.MouseDown[0]       = false;
@@ -1247,9 +1261,14 @@ void BoardView::Update() {
 
 		{
 			if (m_validBoard) {
-				ImVec2 s = ImGui::CalcTextSize(fhistory.history[0]);
+#ifdef __EMSCRIPTEN__ // Paths are internal to the browser storage
+				const char *boardName = fhistory.Trim_filename(fhistory.history[0], 1);
+#else
+				const char *boardName = fhistory.history[0];
+#endif
+				ImVec2 s = ImGui::CalcTextSize(boardName);
 				ImGui::SameLine(ImGui::GetWindowWidth() - s.x - 20);
-				ImGui::Text("%s", fhistory.history[0]);
+				ImGui::Text("%s", boardName);
 				ImGui::SameLine();
 			}
 		}

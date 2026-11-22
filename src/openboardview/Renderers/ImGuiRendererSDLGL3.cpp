@@ -1,11 +1,7 @@
 #include "ImGuiRendererSDLGL3.h"
 
 
-#ifdef ENABLE_GLES2
-#include <glad/gles2.h>
-#else
-#include <glad/gl.h>
-#endif
+#include "GL.h"
 #include "backends/imgui_impl_opengl3.h"
 
 std::string ImGuiRendererSDLGL3::name() {
@@ -93,12 +89,16 @@ std::string ImGuiRendererSDLGL3::createTexture(ImTextureID* out_texture, uint8_t
 	switch (fmt) {
 		default:
 		case 0:
-#ifdef ENABLE_GLES2
+#if defined(__EMSCRIPTEN__)
+			return "BGRA textures are not supported by WebGL.";
+#elif defined(ENABLE_GLES2)
 			format = GL_BGRA_EXT;
 #else
 			format = GL_BGRA;
 #endif
+#ifndef __EMSCRIPTEN__
 			break;
+#endif
 		case 1:
 			format = GL_RGBA;
 			break;

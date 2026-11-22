@@ -4,6 +4,9 @@
 #include "imgui/misc/cpp/imgui_stdlib.h"
 
 #include "platform.h"
+#ifdef __EMSCRIPTEN__
+#include "web.h"
+#endif
 
 namespace Preferences {
 
@@ -34,6 +37,16 @@ void BackgroundImage::imageSettings(const std::string &name, Image &image) {
 	}
 	ImGui::SameLine();
 	if (ImGui::Button(("Browse##" + name).c_str())) {
+#ifdef __EMSCRIPTEN__
+		// Answers in a later frame. image belongs to the BoardView, so it is still there by then.
+		web::pickAttachment([this, &image](const filesystem::path &path) {
+			image.file = path;
+			std::string error = image.reload();
+			if (!error.empty()) {
+				erroredFiles.push_back(error);
+			}
+		});
+#else
 		auto path = show_file_picker();
 		if (!path.empty()) {
 			image.file = path;
@@ -43,6 +56,7 @@ void BackgroundImage::imageSettings(const std::string &name, Image &image) {
 				erroredFiles.push_back(error);
 			}
 		}
+#endif
 	}
 
 	ImGui::InputInt(("X offset##" + name).c_str(), &image.offsetX);

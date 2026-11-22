@@ -2,6 +2,7 @@
 /Release
 /release_build/
 /build/
+/build_web/
 /bin/
 /lib/
 test

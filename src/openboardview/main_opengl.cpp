@@ -46,6 +46,21 @@
 #include "osx.h" // configureMenuBar()
 #endif
 
+/*
+ * The browser calls the main loop once per frame, after main() has returned. Everything the loop uses must
+ * thus be static on the web, which the compiler enforces as the loop body can't capture anything there.
+ * Elsewhere these stay locals, as static ones would be destroyed by exit() after the renderer is gone.
+ */
+#ifdef __EMSCRIPTEN__
+#include <emscripten.h>
+#include "web.h"
+#define MAIN_LOOP_STATE static
+#define MAIN_LOOP_CAPTURE
+#else
+#define MAIN_LOOP_STATE
+#define MAIN_LOOP_CAPTURE &
+#endif
+
 struct globals {
 	char *input_file = nullptr;
 	char *config_file = nullptr;
@@ -211,11 +226,19 @@ void cleanupAndExit(int c) {
 	exit(c);
 }
 
+#ifdef __EMSCRIPTEN__
+static int run(int argc, char **argv) {
+#else
 int main(int argc, char **argv) {
-	uint8_t sleepout;
-	std::string configDir;
-	globals g; // because some things we have to store *before* we load the config file in BoardView app.obvconf
-	BoardView app{};
+#endif
+	MAIN_LOOP_STATE uint8_t sleepout;
+	MAIN_LOOP_STATE std::string configDir;
+	MAIN_LOOP_STATE globals g; // because some things we have to store *before* we load the config file in BoardView app.obvconf
+	MAIN_LOOP_STATE BoardView app{};
+
+#ifdef __EMSCRIPTEN__
+	web::initStorage();
+#endif
 
 	SDL_LogSetAllPriority(SDL_LOG_PRIORITY_INFO);
 
@@ -321,14 +344,19 @@ int main(int argc, char **argv) {
 		cleanupAndExit(1);
 	}
 
-	SDL_Window *window = Renderers::current->getWindow();
+	MAIN_LOOP_STATE SDL_Window *window = Renderers::current->getWindow();
 
 	if (window == NULL) {
 		cleanupAndExit(1);
 	}
 
 	SDL_SetWindowTitle(window, OBV_NAME " " OBV_VERSION);
+#ifdef __EMSCRIPTEN__
+	SDL_GetWindowSize(window, &g.width, &g.height); // The page decides of the size
+	web::initInput();
+#else
 	SDL_SetWindowSize(window, window_width, window_height);
+#endif
 
 	SDL_EventState(SDL_DROPFILE, SDL_ENABLE);
 
@@ -346,8 +374,8 @@ int main(int argc, char **argv) {
 	style.FontScaleDpi = main_scale;        // Set initial font scale. (using io.ConfigDpiScaleFonts=true makes this unnecessary. We leave both here for documentation purpose)
 
 	// Main loop
-	bool done             = false;
-	bool preload_required = false;
+	MAIN_LOOP_STATE bool done             = false;
+	MAIN_LOOP_STATE bool preload_required = false;
 
 	if (g.dpi > 0) setDPI(g.dpi);
 
@@ -365,14 +393,14 @@ int main(int argc, char **argv) {
 
 	if (g.font_size > 0.0) app.config.fontSize = g.font_size;
 
-	Fonts fonts;
+	MAIN_LOOP_STATE Fonts fonts;
 	std::string loadedFontName = fonts.load(app.config.fontName);
 	if (!loadedFontName.empty()) { // Overwrite saved font name by the one that has just been loaded
 		app.obvconfig.WriteStr("fontName", loadedFontName.c_str());
 	}
 
 	// ImVec4 clear_color = ImColor(20, 20, 30);
-	ImVec4 clear_color = ImColor(app.m_colors.backgroundColor);
+	MAIN_LOOP_STATE ImVec4 clear_color = ImColor(app.m_colors.backgroundColor);
 
 	/*
 	 * If we've asked to load a file from the command line
@@ -397,8 +425,8 @@ int main(int argc, char **argv) {
 	 * the mouse or 'waking up' OBV then increase to 5 or more.
 	 */
 	sleepout = 30;
-	float angleacc = 0.0;
-	while (!done) {
+	MAIN_LOOP_STATE float angleacc = 0.0;
+	auto mainLoopIteration = [MAIN_LOOP_CAPTURE]() {
 
 		SDL_Event event;
 		while (SDL_PollEvent(&event)) {
@@ -453,13 +481,13 @@ int main(int argc, char **argv) {
 		}
 
 		if (!(sleepout--)) {
-#ifdef _WIN32
+#if defined(_WIN32)
 			Sleep(50);
-#else
+#elif !defined(__EMSCRIPTEN__) // Must not block in a browser, skipping the frame is enough
 			usleep(50000);
 #endif
 			sleepout = 0;
-			continue;
+			return;
 		} // puts OBV to sleep if nothing is happening.
 		// Prepare frame
 		Renderers::current->initFrame();
@@ -474,16 +502,24 @@ int main(int argc, char **argv) {
 
 		app.Update();
 		if (app.m_wantsQuit) {
+#ifdef __EMSCRIPTEN__
+			app.m_wantsQuit = false; // A page can't close itself
+#else
 			SDL_Event sdlevent;
 			sdlevent.type = SDL_QUIT;
 			SDL_PushEvent(&sdlevent);
+#endif
 		}
 
 		// Update the title of the SDL app if the board filename has changed. -
 		// PLD20160618
 		if (app.history_file_has_changed) {
 			char scratch[1024];
+#ifdef __EMSCRIPTEN__ // Paths are internal to the browser storage
+			snprintf(scratch, sizeof(scratch), "%s - %s", OBV_NAME, app.fhistory.Trim_filename(app.fhistory.history[0], 1));
+#else
 			snprintf(scratch, sizeof(scratch), "%s - %s", OBV_NAME, app.fhistory.history[0]);
+#endif
 			SDL_SetWindowTitle(window, scratch);
 			app.history_file_has_changed = 0;
 		}
@@ -492,6 +528,7 @@ int main(int argc, char **argv) {
 		ImGui::Render();
 		Renderers::current->renderFrame(clear_color);
 
+#ifndef __EMSCRIPTEN__
 		// vsync disabled, manual FPS limiting
 		if (!SDL_GL_GetSwapInterval()) {
 			static const int FPS = 30;
@@ -501,7 +538,15 @@ int main(int argc, char **argv) {
 			std::this_thread::sleep_until(nextFrame);
 			nextFrame += frameDuration;
 		}
-	}
+#endif
+	};
+
+#ifdef __EMSCRIPTEN__
+	// Not simulating an infinite loop, as it unwinds main() by throwing. The runtime outlives main().
+	emscripten_set_main_loop(mainLoopIteration, 0, false);
+	return 0;
+#else
+	while (!done) mainLoopIteration();
 
 	// Cleanup
 	Renderers::current->shutdown();
@@ -510,4 +555,17 @@ int main(int argc, char **argv) {
 
 	cleanupAndExit(0);
 	return 0;
+#endif
 }
+
+#ifdef __EMSCRIPTEN__
+/*
+ * Must not take arguments: clang 15 then names it __main_argc_argv, which Emscripten 3.1.6 (Ubuntu 24.04) doesn't
+ * export. The link succeeds, but without any of the program.
+ */
+int main() {
+	static char name[] = OBV_NAME;
+	static char *argv[] = {name, nullptr};
+	return run(1, argv);
+}
+#endif

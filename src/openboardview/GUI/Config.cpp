@@ -57,9 +57,11 @@ void Config::SetCAEKey(const char *keytext) {
 
 void Config::SetXZZPCBKey(const std::string &keytext) {
 	try {
-		XZZPCBKey = std::stoul(keytext, nullptr, 0);
+		XZZPCBKey = std::stoull(keytext, nullptr, 0); // long is 32-bit on Windows and WebAssembly
 		XZZPCBKeyStr = keytext;
 	} catch (const std::invalid_argument &e) {
+
+	} catch (const std::out_of_range &e) {
 
 	}
 }
